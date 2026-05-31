@@ -1,0 +1,8 @@
+.zig-cache/
+zig-out/
+zig-pkg/
+*.db
+*.db-shm
+*.db-wal
+.git/
+test_out.log

@@ -1,0 +1,30 @@
+[Unit]
+Description=Spline Core — AI Training Prescription Daemon
+Documentation=file:///DESIGN.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/spline
+WorkingDirectory=/var/lib/spline
+EnvironmentFile=/etc/spline/spline.env
+
+# Crash recovery (DESIGN §8)
+Restart=on-failure
+RestartSec=30
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/spline
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=spline-core
+
+[Install]
+WantedBy=multi-user.target

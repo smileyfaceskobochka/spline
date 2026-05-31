@@ -1,0 +1,20 @@
+# Zig
+zig-cache/
+.zig-cache/
+zig-out/
+zig-pkg/
+build/
+
+# Environment Variables
+.env
+.env.local
+
+# SQLite Database
+*.db
+*.db-shm
+*.db-wal
+
+# Temporary / OS Files
+*.log
+.DS_Store
+*~

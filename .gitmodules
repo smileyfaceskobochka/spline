@@ -1,0 +1,3 @@
+[submodule "third-party/ctoon"]
+	path = third-party/ctoon
+	url = https://github.com/smileyfaceskobochka/ctoon.git

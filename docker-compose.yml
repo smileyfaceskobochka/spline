@@ -1,0 +1,16 @@
+services:
+  spline-core:
+    build: .
+    container_name: spline-core
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Explicitly tell Spline where to put the SQLite database so it is persisted
+      - DB_PATH=/app/data/spline.db
+    volumes:
+      - spline_data:/app/data
+
+volumes:
+  spline_data:
+    name: spline_data
