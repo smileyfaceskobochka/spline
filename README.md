@@ -10,13 +10,19 @@ It leverages the [TOON (Token Oriented Object Notation)](https://toonformat.dev)
 
 ## Installation & Usage
 
-Spline Core is fully containerized with Docker Compose.
+Spline Core uses a decoupled architecture where telemetry is gathered by standalone plugin executables (e.g. `lyfta-spline`) invoked by the main orchestrator (`spline`). Both binaries must be compiled and present in the system `PATH`.
 
 ### 1. Configuration
 
 Create a `.env` file in the root of the directory:
 
 ```env
+# Daemon cycle interval in seconds (e.g., 86400 = 24 hours)
+SPLINE_CYCLE_INTERVAL_SEC=86400
+
+# SQLite Database Location (defaults to spline.db in working dir)
+DB_PATH=spline.db
+
 # Lyfta API configuration
 LYFTA_API_KEY=your_lyfta_api_key_here
 LYFTA_WORKOUT_NUM=5
@@ -30,9 +36,9 @@ AI_MODEL=llama-3.1-8b-instant
 USER_CONTEXT="Currently running a Push/Pull/Legs split. Avoid heavy deadlifts."
 ```
 
-### 2. Run the Daemon
+### 2. Run the Daemon (Docker Compose)
 
-Boot the daemon in the background using Docker Compose. The container will automatically compile the Zig binary on the first run.
+Boot the daemon in the background using Docker Compose. The container will automatically compile both the orchestrator and plugin binaries, and load the `.env` configuration file:
 
 ```bash
 docker compose up -d
@@ -40,12 +46,11 @@ docker compose up -d
 
 ### 3. View Logs
 
-You can monitor the daemon querying the Lyfta API and dispatching context to the AI in real-time:
+You can monitor the daemon executing the telemetry plugin, querying the LLM, and saving prescriptions:
 
 ```bash
 docker compose logs -f
 ```
-
 ## Built With
 
 - **[Zig](https://ziglang.org/)** - The core language for the daemon.

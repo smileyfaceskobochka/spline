@@ -10,6 +10,13 @@ ExecStart=/usr/local/bin/spline
 WorkingDirectory=/var/lib/spline
 EnvironmentFile=/etc/spline/spline.env
 
+# Static user configuration for external database access
+User=spline
+Group=spline
+StateDirectory=spline
+StateDirectoryMode=0755
+ConfigurationDirectory=spline
+
 # Crash recovery (DESIGN §8)
 Restart=on-failure
 RestartSec=30
@@ -18,7 +25,6 @@ RestartSec=30
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/spline
 PrivateTmp=true
 
 # Logging

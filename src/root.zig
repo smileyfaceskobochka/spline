@@ -6,8 +6,6 @@ pub const c = @cImport({
 
 const zqlite = @import("zqlite");
 
-pub const lyfta = @import("lyfta-spline.zig");
-
 // --- Custom Memory Allocator Bridge for ctoon FFI ---
 
 pub threadlocal var current_allocator: ?std.mem.Allocator = null;
@@ -76,6 +74,11 @@ pub const SqliteDb = struct {
     pub fn open(path: [:0]const u8) !SqliteDb {
         const flags = zqlite.OpenFlags.Create | zqlite.OpenFlags.ReadWrite;
         const conn = try zqlite.open(path, flags);
+        errdefer conn.close();
+
+        // Enforce a busy timeout (5000ms) to queue concurrent operations instead of throwing SQLITE_BUSY
+        try conn.exec("PRAGMA busy_timeout = 5000;", .{});
+
         return SqliteDb{ .db = conn };
     }
 
@@ -155,5 +158,3 @@ test "SQLite wrapper unit test" {
     try db.insertPrescription("Push Day A", "workout: Push Day A", "Bench Press target: 105kg x 5 reps");
     try std.testing.expectEqual(true, try db.prescriptionExists("Push Day A", "workout: Push Day A"));
 }
-
-

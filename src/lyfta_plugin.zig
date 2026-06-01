@@ -56,13 +56,7 @@ fn parseRpe(rir_str: ?[]const u8) f64 {
 
 /// Fetches a single page of workouts from the Lyfta API.
 /// Returns the parsed response which includes pagination metadata.
-fn fetchPage(allocator: std.mem.Allocator, io: std.Io, api_key: []const u8, page: u32) !std.json.Parsed(RawResponse) {
-    var client = std.http.Client{
-        .allocator = allocator,
-        .io = io,
-    };
-    defer client.connection_pool.deinit(io);
-
+fn fetchPage(client: *std.http.Client, allocator: std.mem.Allocator, api_key: []const u8, page: u32) !std.json.Parsed(RawResponse) {
     const auth_header_value = try std.fmt.allocPrint(allocator, "Bearer {s}", .{api_key});
     defer allocator.free(auth_header_value);
 
@@ -108,46 +102,58 @@ fn normalizeWorkouts(allocator: std.mem.Allocator, raw_workouts: []const RawWork
         }
 
         for (w.exercises) |e| {
-            // Share the name allocation across all sets of the same exercise
             const e_name = try allocator.dupe(u8, e.excercise_name);
-            errdefer allocator.free(e_name);
 
             if (e.sets.len == 0) {
                 // Exercise with no sets — still record it with zeroed values
-                try exercises_list.append(allocator, .{
+                exercises_list.append(allocator, .{
                     .name = e_name,
                     .weight = 0.0,
                     .reps = 0,
                     .rpe = 0.0,
-                });
+                }) catch |err| {
+                    allocator.free(e_name);
+                    return err;
+                };
             } else {
-                // First set uses the already-allocated name
-                try exercises_list.append(allocator, .{
+                // First set uses the allocated name
+                exercises_list.append(allocator, .{
                     .name = e_name,
                     .weight = parseWeight(e.sets[0].weight),
                     .reps = parseReps(e.sets[0].reps),
                     .rpe = parseRpe(e.sets[0].rir),
-                });
+                }) catch |err| {
+                    allocator.free(e_name);
+                    return err;
+                };
+
                 // Subsequent sets get their own copy of the name
                 for (e.sets[1..]) |s| {
-                    try exercises_list.append(allocator, .{
-                        .name = try allocator.dupe(u8, e.excercise_name),
+                    const extra_name = try allocator.dupe(u8, e.excercise_name);
+                    exercises_list.append(allocator, .{
+                        .name = extra_name,
                         .weight = parseWeight(s.weight),
                         .reps = parseReps(s.reps),
                         .rpe = parseRpe(s.rir),
-                    });
+                    }) catch |err| {
+                        allocator.free(extra_name);
+                        return err;
+                    };
                 }
             }
         }
 
+        const title_copy = try allocator.dupe(u8, w.title);
+        errdefer allocator.free(title_copy);
+
         try out.append(allocator, .{
-            .name = try allocator.dupe(u8, w.title),
+            .name = title_copy,
             .exercises = try exercises_list.toOwnedSlice(allocator),
         });
     }
 }
 
-pub fn fetchWorkouts(allocator: std.mem.Allocator, io: std.Io, api_key: []const u8) ![]Workout {
+pub fn fetchWorkouts(client: *std.http.Client, allocator: std.mem.Allocator, api_key: []const u8) ![]Workout {
     var workouts_list: std.ArrayList(Workout) = .empty;
     errdefer {
         for (workouts_list.items) |w| {
@@ -161,7 +167,7 @@ pub fn fetchWorkouts(allocator: std.mem.Allocator, io: std.Io, api_key: []const 
     // Fetch page 1 to discover total_pages
     var page: u32 = 1;
     while (true) {
-        const parsed = try fetchPage(allocator, io, api_key, page);
+        const parsed = try fetchPage(client, allocator, api_key, page);
         defer parsed.deinit();
 
         try normalizeWorkouts(allocator, parsed.value.workouts, &workouts_list);
@@ -184,6 +190,38 @@ pub fn freeWorkouts(allocator: std.mem.Allocator, workouts: []Workout) void {
         allocator.free(w.name);
     }
     allocator.free(workouts);
+}
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = std.heap.smp_allocator;
+    const env_map = init.environ_map;
+
+    const api_key = env_map.get("LYFTA_API_KEY") orelse {
+        std.log.err("Missing LYFTA_API_KEY environment variable.", .{});
+        return error.MissingLyftaApiKey;
+    };
+
+    // Initialize HTTP client
+    var client = std.http.Client{
+        .allocator = allocator,
+        .io = init.io,
+    };
+    defer client.deinit();
+
+    // Fetch workouts
+    const workouts = try fetchWorkouts(&client, allocator, api_key);
+    defer freeWorkouts(allocator, workouts);
+
+    // Stringify workouts to an in-memory buffer using the Allocating writer
+    var out_buf = std.Io.Writer.Allocating.init(allocator);
+    defer out_buf.deinit();
+    try std.json.Stringify.value(workouts, .{}, &out_buf.writer);
+
+    const out_slice = try out_buf.toOwnedSlice();
+    defer allocator.free(out_slice);
+
+    // Print to stdout using the async I/O framework
+    try std.Io.File.stdout().writeStreamingAll(init.io, out_slice);
 }
 
 // --- Unit Tests ---
